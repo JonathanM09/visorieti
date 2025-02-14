@@ -27,10 +27,17 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.InputStream;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
 import gov.census.cspro.csentry.fileaccess.FileAccessHelper;
+import okhttp3.OkHttpClient;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -199,14 +206,50 @@ public class MainActivity extends AppCompatActivity {
 
     private void find(String codigo) {
 
+
+
+            SSLContext sslContext = null;
+            TrustManager[] trustAllCerts = null;
+            try {
+                trustAllCerts = new TrustManager[]{
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                            }
+
+                            @Override
+                            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                            }
+
+                            @Override
+                            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                                return new java.security.cert.X509Certificate[]{};
+                            }
+                        }
+                };
+
+                sslContext = SSLContext.getInstance("SSL");
+                sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            } catch (NoSuchAlgorithmException | KeyManagementException e) {
+                e.printStackTrace();
+            }
+
+            OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
+            if (sslContext != null) {
+                httpClient.sslSocketFactory(sslContext.getSocketFactory(), (X509TrustManager) trustAllCerts[0])
+                        .hostnameVerifier((hostname, session) -> true)
+                        .build();
+            }
+
+
         Retrofit retrofit = new Retrofit.Builder()
 //                .baseUrl("https://www.censospanama.pa/")
 //                .baseUrl("https://www.censospanama.pa/epm-api/")       //EML
 //                .baseUrl("https://www.inec.gob.pa/epm-api/")             //EML
                 .baseUrl("https://www.inec.gob.pa/eti-api/")             //CEA
-
-                .addConverterFactory(GsonConverterFactory.create()).build();
-
+                .addConverterFactory(GsonConverterFactory.create())
+                .client(Objects.requireNonNull(httpClient).build())
+            .build();
 
         InterfazAPI interfazAPI = retrofit.create(InterfazAPI.class);
         Call<Questionario> call = interfazAPI.find(codigo);
